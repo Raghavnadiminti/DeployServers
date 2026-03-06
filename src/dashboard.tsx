@@ -53,37 +53,49 @@ export default function Dashboard() {
 
   // Updated to async function making POST request to /api/projects
   const handleDeploy = async (repoFullName: string) => {
-    setDeployingRepo(repoFullName);
-    
-    try {
-      const response = await fetch("https://deployservers-backend.onrender.com/api/projects", {
+  setDeployingRepo(repoFullName);
+
+  try {
+    const response = await fetch(
+      "https://deployservers-backend.onrender.com/api/projects",
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include", // Required to authenticate the post request
-        body: JSON.stringify({ repoFullName }), // Match your backend req.body mapping
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to set up deployment");
+        credentials: "include",
+        body: JSON.stringify({ repoFullName }),
       }
+    );
 
-      const data = await response.json();
-      console.log("Deployment triggered successfully:", data);
-      alert(`Successfully set up deployment for ${repoFullName}!`);
-      
-      // Optional: Redirect user to the project logs or configuration page here
-      // window.location.href = `/project/${repoFullName}`;
+    if (response.status === 500) {
+      alert(
+        "GitHub App is not installed for this repository. Redirecting to installation..."
+      );
 
-    } catch (err) {
-      console.error("Deploy error:", err);
-      alert(`Error deploying ${repoFullName}. Check console for details.`);
-    } finally {
-      setDeployingRepo(null);
+      window.location.href =
+        "https://github.com/apps/deployservers/installations/new";
+
+      return;
     }
-  };
 
+    if (!response.ok) {
+      throw new Error("Failed to set up deployment");
+    }
+
+    const data = await response.json();
+
+    console.log("Deployment triggered successfully:", data);
+
+    alert(`Successfully set up deployment for ${repoFullName}!`);
+
+  } catch (err) {
+    console.error("Deploy error:", err);
+    alert(`Error deploying ${repoFullName}. Check console for details.`);
+  } finally {
+    setDeployingRepo(null);
+  }
+};
   const filteredRepos = repos.filter((repo) =>
     repo.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     (repo.full_name && repo.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
