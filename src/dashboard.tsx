@@ -1,279 +1,351 @@
 import React, { useState, useEffect } from "react";
+import CreateProject from "./createProject";
 
-interface Repository {
-  id: number | string;
-  name: string;
-  full_name?: string; // Added full_name as GitHub typically uses this for "user/repo" format
-  isPrivate: boolean; // Note: if your backend sends raw github data, this might be `private` instead
-  language: string | null;
-  updated: string; 
+// Updated to match your backend's exact Mongoose schema response
+interface Project {
+  _id: string; // Mongoose ID
+  repoName: string;
+  repoFullName: string;
+  defaultBranch: string;
+  repoId: number;
+  createdAt: string;
+  status?: "running" | "stopped" |  "failed" | "starting"; 
+  url?: string; 
+}
+
+interface ProjectsResponse {
+  count: number;
+  projects: Project[];
 }
 
 export default function Dashboard() {
-  const [repos, setRepos] = useState<Repository[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const[error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  
-  // New state to track which repo is currently being deployed
-  const[deployingRepo, setDeployingRepo] = useState<string | null>(null);
+  const [view, setView] = useState<"dashboard" | "create">("dashboard");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const[loadingProjects, setLoadingProjects] = useState<boolean>(true);
+
+  // Fetch projects from your backend
+  const fetchProjects = async () => {
+    setLoadingProjects(true);
+    try {
+      const response = await fetch("https://deployservers-backend.onrender.com/api/projects", { 
+        method: "GET",
+        credentials: "include" 
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        console.log("Unauthorized, redirecting to login...");
+        window.location.href = "/";
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch projects");
+      }
+
+      const data: ProjectsResponse = await response.json();
+      setProjects(data.projects);
+
+    } catch (err) {
+      console.error("Error loading projects:", err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchRepos = async () => {
-      try {
-        //https://deployservers-backend.onrender.com/api/repos
-      
-        const response = await fetch("https://deployservers-backend.onrender.com/api/repos", {
-          method: "GET",
-          credentials: "include", 
-        });
-
-        // if (response.status === 401 || response.status === 403) {
-        //   console.log("Unauthorized, redirecting to login...");
-        //   window.location.href = "/";
-        //   return;
-        // }
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch repositories: ${response.statusText}`);
-        }
-
-        const data: Repository[] = await response.json();
-        setRepos(data);
-        setLoading(false);
-      } catch (err) {
-        console.error("Error loading dashboard:", err);
-        setError("Failed to load repositories from GitHub. Please try again.");
-        setLoading(false);
-      }
-    };
-
-    fetchRepos();
-  },[]);
-
-  // Updated to async function making POST request to /api/projects
-  const handleDeploy = async (repoFullName: string) => {
-  setDeployingRepo(repoFullName);
-
-  try {
-    const response = await fetch(
-      "https://deployservers-backend.onrender.com/api/projects",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ repoFullName }),
-      }
-    );
-
-    if (response.status === 500) {
-      alert(
-        "GitHub App is not installed for this repository. Redirecting to installation..."
-      );
-
-      window.location.href =
-        "https://github.com/apps/deployservers/installations/new";
-
-      return;
+    if (view === "dashboard") {
+      fetchProjects();
     }
-
-    if (!response.ok) {
-      throw new Error("Failed to set up deployment");
-    }
-
-    const data = await response.json();
-
-    console.log("Deployment triggered successfully:", data);
-
-    alert(`Successfully set up deployment for ${repoFullName}!`);
-
-  } catch (err) {
-    console.error("Deploy error:", err);
-    alert(`Error deploying ${repoFullName}. Check console for details.`);
-  } finally {
-    setDeployingRepo(null);
-  }
-};
-  const filteredRepos = repos.filter((repo) =>
-    repo.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (repo.full_name && repo.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  }, [view]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-gray-100 font-sans selection:bg-blue-500/30">
-      {/* Dashboard Navbar */}
-      <nav className="flex items-center justify-between max-w-7xl mx-auto px-6 py-4 border-b border-white/10 bg-[#0a0a0a] sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <svg className="w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-            </svg>
-            <span className="text-xl font-bold tracking-tight text-white hidden sm:block">
-              deploy-servers
-            </span>
-          </div>
-          <span className="text-gray-600">/</span>
-          <span className="text-gray-300 font-medium">Dashboard</span>
+    <div className="relative min-h-screen bg-[#050505] text-gray-100 font-sans selection:bg-blue-500/30 overflow-hidden">
+      
+      {/* ========================================== */}
+      {/* CUSTOM ANIMATION CSS & BACKGROUND EFFECTS  */}
+      {/* ========================================== */}
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-20px); }
+        }
+        @keyframes drift {
+          from { transform: translateX(-20vw); }
+          to { transform: translateX(120vw); }
+        }
+        .animate-float-slow { animation: float 8s ease-in-out infinite; }
+        .animate-float-fast { animation: float 5s ease-in-out infinite; }
+        .animate-drift-slow { animation: drift 60s linear infinite; }
+        .animate-drift-fast { animation: drift 40s linear infinite; }
+        
+        /* Glass card hover effect */
+        .glass-card {
+          background: rgba(20, 20, 20, 0.4);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .glass-card:hover {
+          background: rgba(30, 30, 30, 0.6);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          box-shadow: 0 0 40px rgba(59, 130, 246, 0.1);
+        }
+      `}</style>
+
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+        {/* Glow Orbs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full mix-blend-screen"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 blur-[120px] rounded-full mix-blend-screen"></div>
+
+        {/* Drifting Clouds (Abstract Tech Clouds) */}
+        <div className="absolute top-[15%] left-0 w-full animate-drift-slow opacity-[0.03]">
+          <svg width="400" height="200" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+          </svg>
+        </div>
+        <div className="absolute top-[50%] left-0 w-full animate-drift-fast opacity-[0.02] delay-1000">
+          <svg width="300" height="150" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+          </svg>
         </div>
 
-        {/* User Profile / Logout */}
-        <div className="flex items-center gap-4">
-          <button className="text-sm font-medium text-gray-400 hover:text-white transition-colors">
-            Support
-          </button>
-          <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 border border-white/20 cursor-pointer"></div>
+        {/* Floating Server Racks */}
+        <div className="absolute right-[10%] top-[20%] animate-float-slow opacity-[0.15]">
+          <svg width="120" height="180" viewBox="0 0 24 24" fill="none" stroke="url(#blue-grad)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+            <defs>
+              <linearGradient id="blue-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#3b82f6" />
+                <stop offset="100%" stopColor="#8b5cf6" />
+              </linearGradient>
+            </defs>
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+            <line x1="10" y1="6" x2="18" y2="6"></line>
+            <line x1="10" y1="18" x2="18" y2="18"></line>
+          </svg>
         </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-6 pt-12 pb-24">
-        <div className="mb-10">
-          <h1 className="text-3xl font-extrabold text-white mb-2">Let's build something new.</h1>
-          <p className="text-gray-400">To deploy a new application, import an existing Git Repository.</p>
+        <div className="absolute left-[5%] bottom-[20%] animate-float-fast opacity-[0.1]">
+          <svg width="160" height="240" viewBox="0 0 24 24" fill="none" stroke="url(#purple-grad)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+            <defs>
+              <linearGradient id="purple-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#a855f7" />
+                <stop offset="100%" stopColor="#ec4899" />
+              </linearGradient>
+            </defs>
+            <rect x="2" y="2" width="20" height="6" rx="1"></rect>
+            <rect x="2" y="9" width="20" height="6" rx="1"></rect>
+            <rect x="2" y="16" width="20" height="6" rx="1"></rect>
+            <circle cx="6" cy="5" r="1" fill="#ec4899"></circle>
+            <circle cx="6" cy="12" r="1" fill="#ec4899"></circle>
+            <circle cx="6" cy="19" r="1" fill="#ec4899"></circle>
+            <line x1="10" y1="5" x2="18" y2="5"></line>
+            <line x1="10" y1="12" x2="18" y2="12"></line>
+            <line x1="10" y1="19" x2="18" y2="19"></line>
+          </svg>
         </div>
+      </div>
 
-        {/* Import Git Repository Section */}
-        <div className="bg-[#111111] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-          
-          {/* Header & Search */}
-          <div className="p-4 sm:p-6 border-b border-white/10 bg-[#161616]">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
-              </svg>
-              Import Git Repository
-            </h2>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Search your repositories..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-[#0a0a0a] border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-              />
-            </div>
-          </div>
-
-          {/* Repository List */}
-          <div className="divide-y divide-white/10 max-h-[500px] overflow-y-auto">
-            {loading ? (
-              // Loading Skeleton
-              Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="p-4 sm:p-6 flex items-center justify-between animate-pulse">
-                  <div className="flex items-center gap-4">
-                    <div className="w-8 h-8 bg-white/10 rounded-full"></div>
-                    <div>
-                      <div className="w-32 h-4 bg-white/10 rounded mb-2"></div>
-                      <div className="w-24 h-3 bg-white/5 rounded"></div>
-                    </div>
-                  </div>
-                  <div className="w-20 h-9 bg-white/10 rounded-lg"></div>
-                </div>
-              ))
-            ) : error ? (
-              // Error State
-              <div className="p-8 text-center">
-                <div className="w-12 h-12 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      {/* ========================================== */}
+      {/* FOREGROUND CONTENT                         */}
+      {/* ========================================== */}
+      <div className="relative z-10">
+        
+        {/* Glassmorphism Navbar */}
+        <nav className="sticky top-0 z-50 glass-card border-b border-white/5 shadow-sm">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div 
+                className="flex items-center gap-2 cursor-pointer group" 
+                onClick={() => setView("dashboard")}
+              >
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-400 flex items-center justify-center shadow-lg group-hover:shadow-blue-500/40 transition-all duration-300">
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 </div>
-                <h3 className="text-red-400 font-medium mb-1">Error Loading Repositories</h3>
-                <p className="text-sm text-gray-500">{error}</p>
+                <span className="text-xl font-extrabold tracking-tight text-white hidden sm:block">
+                  deploy-servers
+                </span>
               </div>
-            ) : filteredRepos.length > 0 ? (
-              // Fetched Repositories
-              filteredRepos.map((repo) => {
-                // Prefer full_name (e.g., "username/repo") if available from API, otherwise fallback to name
-                const repoTargetName = repo.full_name || repo.name;
-                const isDeploying = deployingRepo === repoTargetName;
+              
+              <div className="h-5 w-px bg-white/20 mx-2"></div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium px-2 py-1 rounded-md bg-white/5 text-gray-300 border border-white/5 cursor-default">
+                  Personal
+                </span>
+                <span className="text-gray-500">/</span>
+                <span className="text-sm font-medium text-white cursor-default">
+                  {view === "dashboard" ? "Dashboard" : "New Project"}
+                </span>
+              </div>
+            </div>
 
-                return (
-                  <div key={repo.id} className="p-4 sm:p-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors group">
-                    <div className="flex items-center gap-4">
-                      {/* Repo Icon (Public/Private) */}
-                      <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border border-white/10 text-gray-400 group-hover:text-blue-400 transition-colors">
-                        {repo.isPrivate ? (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                          </svg>
-                        )}
+            <div className="flex items-center gap-6">
+              <button className="text-sm font-medium text-gray-400 hover:text-white transition-colors">
+                Documentation
+              </button>
+              <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-blue-500 via-purple-500 to-pink-500 p-[2px] cursor-pointer hover:scale-105 transition-transform shadow-lg shadow-purple-500/20">
+                <div className="h-full w-full bg-black rounded-full border border-white/10"></div>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        {/* Main Layout Area */}
+        <main className="max-w-7xl mx-auto px-6 pt-12 pb-24">
+          
+          {/* ========================================== */}
+          {/* VIEW: PROJECTS DASHBOARD                   */}
+          {/* ========================================== */}
+          {view === "dashboard" && (
+            <div className="animate-in fade-in zoom-in-95 duration-500">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
+                <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 tracking-tight">
+                  Overview
+                </h1>
+                <button 
+                  onClick={() => setView("create")}
+                  className="px-6 py-2.5 bg-white text-black text-sm font-bold rounded-xl hover:bg-gray-200 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(255,255,255,0.15)] flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
+                  Add New Project
+                </button>
+              </div>
+
+              {loadingProjects ? (
+                // Loading Skeleton (Flexible)
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="min-h-[12rem] glass-card rounded-2xl animate-pulse p-6 flex flex-col justify-between">
+                      <div className="flex gap-4 items-center mb-6">
+                        <div className="w-12 h-12 bg-white/5 rounded-full shrink-0"></div>
+                        <div className="h-6 w-3/4 bg-white/10 rounded"></div>
                       </div>
-                      
-                      {/* Repo Info */}
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-white group-hover:text-blue-400 transition-colors">
-                            {repoTargetName}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/5 text-gray-400 border border-white/10">
-                            {repo.isPrivate ? "Private" : "Public"}
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-500 flex items-center gap-3">
-                          {repo.language && (
-                            <span className="flex items-center gap-1">
-                              <span className={`w-2 h-2 rounded-full ${repo.language === 'TypeScript' ? 'bg-blue-400' : repo.language === 'Python' ? 'bg-yellow-400' : repo.language === 'Go' ? 'bg-cyan-400' : 'bg-red-400'}`}></span>
-                              {repo.language}
-                            </span>
-                          )}
-                          {repo.language && <span>•</span>}
-                          <span>Updated {repo.updated || "recently"}</span>
-                        </div>
+                      <div className="space-y-3">
+                        <div className="h-4 w-full bg-white/5 rounded"></div>
+                        <div className="h-4 w-2/3 bg-white/5 rounded"></div>
                       </div>
                     </div>
+                  ))}
+                </div>
+              ) : projects.length > 0 ? (
+                // Active Projects Grid (Flexible & Translucent)
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {projects.map((project) => {
+                    const projectStatus = project.status || "building";
+                    const projectUrl = project.url || '';
 
-                    {/* Deploy Button */}
+                    return (
+                      <div key={project._id} className="group min-h-[12rem] h-auto glass-card rounded-2xl transition-all duration-300 cursor-pointer flex flex-col justify-between p-6 relative overflow-hidden">
+                        
+                        {/* Inner Hover Gradient */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                        
+                        <div className="relative z-10 flex-1 flex flex-col">
+                          <div className="flex justify-between items-start gap-4 mb-4">
+                            
+                            {/* Icon & Title (Flexible Wrap) */}
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              <div className="w-10 h-10 shrink-0 rounded-full bg-white/5 flex items-center justify-center border border-white/10 group-hover:bg-blue-500/10 group-hover:border-blue-500/20 transition-all duration-300 shadow-inner">
+                                <svg className="w-5 h-5 text-gray-300 group-hover:text-blue-400 transition-colors" fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" /></svg>
+                              </div>
+                              <div className="flex-1 min-w-0 pt-1">
+                                {/* break-words & line-clamp ensure long names don't break layout */}
+                                <h3 className="font-bold text-lg text-white group-hover:text-blue-400 transition-colors break-words line-clamp-2">
+                                  {project.repoName}
+                                </h3>
+                              </div>
+                            </div>
+                            
+                            {/* Status Indicator (Shrink-0 prevents it from squishing) */}
+                            <div className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider shadow-sm ${
+                              projectStatus === 'running' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                              projectStatus === 'starting' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 
+                              'bg-red-500/10 text-red-400 border border-red-500/20'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${projectStatus === 'building' ? 'animate-pulse bg-yellow-400 shadow-[0_0_8px_#facc15]' : projectStatus === 'running' ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-red-400 shadow-[0_0_8px_#f87171]'}`}></span>
+                              {projectStatus}
+                            </div>
+                          </div>
+
+                          {/* Meta info, flexibly wrapping */}
+                          <div className="mt-auto pt-4 flex flex-col gap-1.5 text-sm text-gray-400">
+                            <p className="flex items-center gap-2 break-all line-clamp-1 group-hover:text-gray-300 transition-colors">
+                              <svg className="w-4 h-4 shrink-0 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                              {project.repoFullName} • {project.defaultBranch}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Footer info */}
+                        <div className="mt-5 pt-4 border-t border-white/10 relative z-10 flex flex-wrap gap-2 justify-between items-center text-sm">
+                          <span className="font-medium text-gray-300 group-hover:text-white transition-colors truncate max-w-[70%]">
+                           <a
+  href={projectUrl}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="font-medium text-gray-300 hover:text-white transition-colors truncate max-w-[70%] block"
+>
+  {projectUrl}
+</a>
+                          </span>
+                          <span className="text-xs font-medium text-gray-500 bg-white/5 px-2 py-1 rounded-md shrink-0">
+                            {new Date(project.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                // Enhanced Empty State with Glassmorphism
+                <div className="glass-card rounded-3xl p-16 text-center shadow-2xl relative overflow-hidden group">
+                  {/* Subtle hover pulse in empty state */}
+                  <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
+                  
+                  <div className="relative z-10">
+                    <div className="w-24 h-24 bg-gradient-to-tr from-blue-500/20 to-purple-500/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-8 border border-white/10 shadow-[0_0_30px_rgba(59,130,246,0.15)] group-hover:scale-110 transition-transform duration-500">
+                      <svg className="w-12 h-12 text-blue-400 drop-shadow-md" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-3xl font-extrabold text-white mb-4 tracking-tight">No deployments yet</h2>
+                    <p className="text-gray-400 mb-10 max-w-lg mx-auto text-lg leading-relaxed">
+                      Connect a GitHub repository to deploy your first backend service. We handle the servers, auto-scaling, and SSL automatically.
+                    </p>
                     <button 
-                      onClick={() => handleDeploy(repoTargetName)}
-                      disabled={isDeploying || deployingRepo !== null}
-                      className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-2 ${
-                        isDeploying 
-                          ? "bg-gray-600 text-gray-300 cursor-not-allowed" 
-                          : deployingRepo !== null 
-                            ? "bg-gray-200 text-black opacity-50 cursor-not-allowed"
-                            : "bg-white text-black hover:bg-gray-200"
-                      }`}
+                      onClick={() => setView("create")}
+                      className="px-8 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-[0_0_30px_rgba(255,255,255,0.2)] inline-flex items-center gap-3 text-lg"
                     >
-                      {isDeploying ? (
-                        <>
-                          <svg className="animate-spin h-4 w-4 text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Deploying...
-                        </>
-                      ) : (
-                        "Deploy"
-                      )}
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" /></svg>
+                      Import Git Repository
                     </button>
                   </div>
-                );
-              })
-            ) : (
-              /* Empty Search State */
-              <div className="p-8 text-center">
-                <svg className="w-12 h-12 text-gray-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h3 className="text-gray-300 font-medium mb-1">No repositories found</h3>
-                <p className="text-sm text-gray-500">We couldn't find any repos matching "{searchQuery}"</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================== */}
+          {/* VIEW: CREATE PROJECT (IMPORT REPO)         */}
+          {/* ========================================== */}
+          {view === "create" && (
+            <div className="relative z-10 glass-card p-2 rounded-3xl border border-white/5 shadow-2xl">
+              <CreateProject 
+                onBack={() => setView("dashboard")} 
+                onDeploySuccess={() => {
+                  setView("dashboard");
+                  fetchProjects(); 
+                }} 
+              />
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

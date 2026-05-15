@@ -9,8 +9,6 @@ function App() {
       <Routes>
        
         <Route path="/" element={<DeployServersHome />} />
-        
-       
         <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </Router>
